@@ -1,6 +1,7 @@
 import sys
 import pygame
 import random
+from pygame.locals import *
 
 # CONSTANTS
 BLACK = 0, 0, 0
@@ -8,64 +9,90 @@ WHITE = 255, 255, 255
 FPS = 60
 WINDOW_WIDTH = 400
 WINDOW_HEIGHT = 400
-BALL_SIZE = BALL_WIDTH, BALLHEIGHT = 50, 50
-PADDLE_SIZE = PADDLE_WIDTH, PADDLE_HEIGHT = 25, 100
-PADDLE_SPEED = 2
-BALL_X_SPEED = 3
-BALL_Y_SPEED = 2
-DOWN = 'down'
-UP = 'up'
+BALL_WIDTH, BALL_LENGTH = 15, 15
+PADDLE_WIDTH, PADDLE_LENGTH = 25, 100
+UP = [0, -1]
+DOWN = [0, 1]
+PADDLE_BUFFER = 10
+THICKNESS = 10
+pygame.font.init()
+FONT = pygame.font.Font('freesansbold.ttf', 20)
+
 
 # CLASSES
 
-
-class Object:    
-    def __init__(self, img, scale, x, screen=pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT)), color=WHITE):
-        self.img = pygame.image.load(img)
-        self.img = pygame.transform.scale(self.img,scale)
-        self.x = x
-        self.y = random.randint(0,WINDOW_HEIGHT -PADDLE_HEIGHT)
-        self.rect = pygame.Rect(x, self.y, scale[0], scale[1])
+class Object:
+    def __init__(self, x, width, length, color, surf):
+        self.x = x  # objects x co-ordinate
+        self.color = color
+        self.surf = surf
+        self.y = (WINDOW_WIDTH/2 - PADDLE_WIDTH/2)
+        self.rect = pygame.Rect(self.x, self.y, width, length)
         self.score = 0
-        self.draw = pygame.draw.rect(screen, color, self.rect)
 
-# MAIN 
+    def draw(self):
+        return pygame.draw.rect(self.surf, self.color, self.rect)
+
+
+class Arena:
+    def __init__(self, surf, color):
+        self.surf = surf
+        self.color = color
+        
+    def update(self, player, computer):
+        self.surf.fill(self.color)
+        pygame.draw.rect(self.surf, self.color, ((0, 0), (
+                WINDOW_WIDTH, WINDOW_HEIGHT)), THICKNESS)
+        score_text = "Player: " + str(
+            player.score) + "   :  Computer: " + str(computer.score)
+        textSurface = FONT.render(score_text, True, WHITE)
+        self.surf.blit(textSurface, (WINDOW_WIDTH/4, 0))
+
+
 def main():
     init()
     runGame()
 
+
 def init():
-    global SCREEN, FPSCLOCK
+    global DISPLAY_SURF, FPS_CLOCK, FONT
     pygame.init()
-    FPSCLOCK = pygame.time.Clock()
-    SCREEN = pygame.display.set_mode((WINDOW_WIDTH,WINDOW_HEIGHT))
+    FPS_CLOCK = pygame.time.Clock()
+    DISPLAY_SURF = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     pygame.display.set_caption("PONG")
-    
+
+
+def random_int():
+    x = 1 if random.random() < 0.5 else -1
+    y = 1 if random.random() < 0.5 else -1
+    return x, y
 
 
 def runGame():
-    theBall = Object("ball.png",(BALL_WIDTH,BALL_HEIGHT), randomX())
-    pPlayer = Object("paddle.png", (PADDLE_WIDTH,PADDLE_HEIGHT),0)
-    pComputer = Object("paddle.png", (PADDLE_WIDTH,PADDLE_HEIGHT),
-                       WINDOW_WIDTH-PADDLE_WIDTH)
+    # creating objects
+    arena = Arena(DISPLAY_SURF, BLACK)
+    ball = Object((WINDOW_WIDTH/2 - BALL_WIDTH/2),
+                  BALL_WIDTH, BALL_LENGTH, WHITE, DISPLAY_SURF)
+    player = Object(PADDLE_BUFFER, PADDLE_WIDTH,
+                    PADDLE_LENGTH, WHITE, DISPLAY_SURF)
+    computer = Object((WINDOW_WIDTH-PADDLE_WIDTH-PADDLE_BUFFER),
+                      PADDLE_WIDTH, PADDLE_LENGTH, WHITE, DISPLAY_SURF)
 
-    position = [10,10] #movement of ball
-    sPressed = False #move paddle down
-    wPressed = False #move paddle up
-    computerScore = False
-    playerScore = False
-    # computer - player score display
-    textSurface, textRect = updateScore(pPlayer, pComputer)
+    # create random start position for ball
+    r_x, r_y = random_int()
+    print("Random Starting position X:", r_x, "Y: ", r_y)
+    position = [r_x, r_y]  # movement of ball
+    sPressed = False  # move paddle down
+    wPressed = False  # move paddle up
 
-
-    #main event loop
-    #PART 1: HANDLING USER INPUT
+    # Main event loop
+    # PART 1: HANDLING USER INPUT
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 terminate()
 
-            #KEYDOWN assignments
+            # KEYDOWN assignments - when key is pressed
             elif event.type == KEYDOWN:
                 if event.key == K_w:
                     wPressed = True #"up" is pressed
@@ -74,68 +101,83 @@ def runGame():
                 elif event.key == K_ESCAPE:
                     terminate()
 
-        #KEYUP assignments - when key goes up, stop movement
+        # KEYUP assignments - when key goes up, stop movement
             elif event.type == KEYUP:
                 if event.key == K_s:
                     sPressed = False
                 elif event.key == K_w:
                     wPressed = False
 
-    #PART 2: UPDATING THE GAME STATE
-        #paddle movement
-        if sPressed and pPlayer.rect.bottom < WINDOW_HEIGHT:
-            pPlayer.rect = pPlayer.rect.move([0,5])
-        elif wPressed and pPlayer.rect.top > 0:
-            pPlayer.rect = pPlayer.rect.move([0,-5])
+    # PART 2: UPDATING THE GAME STATE
+        # player paddle movement
+        if sPressed and player.rect.bottom < WINDOW_HEIGHT:
+            player.rect = player.rect.move(DOWN)
+        elif wPressed and player.rect.top > 0:
+            player.rect = player.rect.move(UP)
 
-        #ball movement
-        theBall.rect = theBall.rect.move(position)
-        #ball reflection from walls
-        if theBall.rect.left < 0 or theBall.rect.right > WINDOW_WIDTH:
+        # computer paddle movement
+        if position[0] == -1:  # if ball is moving away
+            if computer.rect.centery < (WINDOW_HEIGHT/2):
+                computer.rect = computer.rect.move(DOWN)
+                print("AWAY DOWN")
+            elif computer.rect.centery > (WINDOW_HEIGHT/2):
+                computer.rect = computer.rect.move(UP)
+                print("AWAY UP")
+
+        # if ball is moving towards paddle, track its movement
+        # if ball is travelling down and computer paddles base is less than
+        # that of the window
+        elif position[0] == 1:
+            if computer.rect.centery < ball.rect.centery:
+                computer.rect = computer.rect.move(DOWN)
+                print("TOWARDS DOWN")
+            elif computer.rect.centery > ball.rect.centery:
+                computer.rect = computer.rect.move(UP)
+                print("TOWARDS UP")
+
+        # ball movement
+        ball.rect = ball.rect.move(position)
+        
+        # ball reflection from walls
+        if ball.rect.left < 0 or ball.rect.right > WINDOW_WIDTH:
             position[0] = -position[0]
-        if theBall.rect.top < 0 or theBall.rect.bottom > WINDOW_HEIGHT:
+#            print("TEST")
+        if ball.rect.top < 0 or ball.rect.bottom > WINDOW_HEIGHT:
             position[1] = -position[1]
+#            print("TEST")
 
         # collision
-        if theBall.rect.colliderect(pPlayer.rect):
+        if (ball.rect.colliderect(player.rect)) or (
+                ball.rect.colliderect(computer.rect)):
             position[0] = -position[0]
             position[1] = -position[1]
-        # if ball goes out of bounds   
-        if theBall.rect.x < 1:
-            pComputer.score += 1
+        
+        # if ball goes out of bounds -update score
+        # if ball goes past paddle on LHS
+        if ball.rect.x == -1:
+            computer.score = computer.score + 1
             # update the score
-            textSurface, textRect = updateScore(pPlayer, pComputer)            
+            # textSurface, textRect = updateScore(player, computer)            
             
-        elif theBall.rect.x > WINDOW_WIDTH-BALL_WIDTH:
-            pPlayer.score += 1
-            # update the score
-            textSurface, textRect = updateScore(pPlayer, pComputer)
+            # if ball goes past paddle on RHS
+        elif ball.rect.x == (WINDOW_WIDTH-BALL_WIDTH+1):
+            player.score += 1
+            print(player.score)
             
-    #PART 3: RERENDERING THE SCENE
-        SCREEN.fill(BLACK)
-#        SCREEN.blit(b1, b1)
-        SCREEN.blit(theBall.img,theBall.rect)
-        SCREEN.blit(pPlayer.img,pPlayer.rect)
-        SCREEN.blit(pComputer.img,(pComputer.x,pComputer.y))
-        SCREEN.blit(textSurface,textRect)
+    # PART 3: RERENDERING THE SCENE
+        arena.update(player, computer)
+        computer.draw()
+        player.draw()
+        ball.draw()
+
         pygame.display.update()
-        FPSCLOCK.tick(FPS)
+        FPS_CLOCK.tick(FPS)
+
 
 def terminate():
     pygame.quit()
     sys.exit()
 
-def randomX():
-    return random.randint(PADDLE_WIDTH, WINDOW_WIDTH-(PADDLE_WIDTH*2))
-
-def updateScore(pPlayer, pComputer):
-    font = pygame.font.Font('freesansbold.ttf',20)
-    scoreText  = "Player: " + str(pPlayer.score) + "   ||  Computer: "  + str(pComputer.score)
-    textSurface = font.render(scoreText, True, WHITE)
-    textRect = textSurface.get_rect()
-    textRect.center = ((WINDOW_WIDTH/2),(WINDOW_HEIGHT/10))
-    return textSurface, textRect
-    
 
 if __name__ == '__main__':
     main()
